@@ -1,0 +1,308 @@
+---
+title: "Bonnie_Daniel_Assignment1"
+output: pdf_document
+---
+##Problem 1
+###Do certain kinds of voting equimentment lead to greater percentages of undercount?
+
+Attaching libraries:
+```
+library(mosaic)
+library(foreach)
+```
+Reading in the file:
+```{r}
+georgiavotes = read.csv('../HW1/georgia2000.csv', header = TRUE)
+head(georgiavotes)
+attach(georgiavotes)
+```
+We have a column recording the ballots and a column recording the votes. We need a new column called votecount to record the undercount percentage for each county.
+```{r}
+votecount = ((ballots-votes)/ballots)*100
+georgiavotes = cbind(georgiavotes, 'votecount')
+```
+By plotting votecount against the type of equipment used to vote, we can see if there are any major differences among types of equiment.
+```{r}
+plot(equip, votecount, pch = 19, col = 'grey', 
+  xlab = 'equipment', 
+  ylab = '% of undercount')
+```
+From the boxplot, it does not look like there is a significant difference between each kind of voting equipment. The median for each of the types of equipment are about the same at 4% and the range between the quartiles for each is about the same. The main difference are the outliers for the optical and lever plots, where there are 4 outlying counties that use optical voting machines and 1 outlying county that uses lever voting machines.
+
+###Does this link between voting machines and % of undercount disparately impact poor and minority counties?
+First, we need to see if there is a link between poor counties and % of undercount, then we need to investigate if there is a link between percentage of African Americans within a county and the % of undercount. 
+
+```{r}
+plot(poor, votecount, xlab = 'poor or not poor', ylab = 'votecount')
+```
+From this plot, it is obvious that poor counties have a higher variance in votecount than counties that are not poor. Counties that are not considered poor have consistently lower undercount percentages.  To investigate whether this is also linked to voting machine types, identifying the counties that are poor and have a high undercount percentage and then linking these to the voting machine type could be helpful.
+
+```{r}
+outliers = c(1,3,9,19,120,133,140,153)
+georgiavotes[outliers,]
+plot(equip[outliers], votecount[outliers])
+
+```
+The outliers (or counties that have a higher votecount score than any not poor county) are Appling, Bacon, Ben Hill, Calhoun, Randolph, Taylor, Treutlen And Wheeler counties. When just these counties are plotted for lever vs. votecount, only the punch, lever and optical machine types are accounted for. The optical machines have the highest median and the widest spread in terms of undercount percentage. From here, I would conclude that optical machines, poor counties, and a high undercount percentage are linked.
+
+Next, we investigate if a similar pattern appears when we use the perAA variable in lieu of the poor variable.
+
+```{r}
+plot(perAA, votecount, xlab = '% African American', ylab = 'votecount')
+outliersperAA = c(3, 9, 19, 70, 120, 128, 133, 134)
+georgiavotes[outliersperAA,]
+plot(equip[outliersperAA], votecount[outliersperAA])
+```
+The outliers for the percent of African Americans compared to the percent of undercount were similar to the counties above; the two share Bacon, Ben Hill, Calhoun, Randolph, and Taylor counties. Several other counties were outliers here but not above: Hancock, Stewart and Telfair counties. When plotting only the outliers on the voting equipment against percent of undercount, we find a stunningly similar graph to the poor county outliers. None of the outliers used paper ballots, and the counties that had the highest rates of undercounting used optical machines.
+
+Therefore, it appears that the relationship between the type of voting equipment and percent of undercounting is very relevant in poor and minority counties.
+
+
+##Problem 2
+###What are the different ways to invest in five asset classes? Which one is the riskiest and which one is the safest?
+
+Below we read in a library and the assets SPY, TLT, LQD, EEM and VNQ for the past five years. Then we calculate the returns from the prices for each asset.
+```{r}
+library(fImport)
+assets = c("SPY","TLT","LQD","EEM","VNQ")
+prices = yahooSeries(assets, from = '2010-07-30', to = '2015-07-30')
+head(prices)
+YahooPricesToReturns = function(series) {
+	mycols = grep('Adj.Close', colnames(series))
+	closingprice = series[,mycols]
+	N = nrow(closingprice)
+	percentreturn = as.data.frame(closingprice[2:N,]) / as.data.frame(closingprice[1:(N-1),]) - 1
+	mynames = strsplit(colnames(percentreturn), '.', fixed=TRUE)
+	mynames = lapply(mynames, function(x) return(paste0(x[1], ".PctReturn")))
+	colnames(percentreturn) = mynames
+	as.matrix(na.omit(percentreturn))
+}
+returns = YahooPricesToReturns(prices)
+
+```
+
+To understand the risk/return properties of each of the asset classes, we can plot the pairs of returns against one another, and then find the beta coefficient of each asset class in comparison to SPY.
+```{r}
+pairs(returns)
+lm_TLT = lm(returns[,2] ~ returns[,1])
+lm_LQD = lm(returns[,3] ~ returns[,1])
+lm_EEM = lm(returns[,4] ~ returns[,1])
+lm_VNQ = lm(returns[,5] ~ returns[,1])
+
+# The estimated beta for each asset class based on daily returns
+coef(lm_TLT); coef(lm_LQD); coef(lm_EEM); coef(lm_VNQ)
+```
+This plot shows the association between each of the classes and the estimated beta for each asset class. From both of these, we can see that the TLT and LQD assets are negatively associated with SPY (TLT dramatically more so than LQD) and the EEM and VNQ assets are positively associated with SPY.  This indicates that TLT and LQD are relatively safe investments while EEM and VNQ are as or more risky than the market.
+
+A safe portfolio would include the SPY asset class, the TLT asset class and the LQD asset class, as all of these asset classes are relatively safe.  A more aggresive portfolio might include one of the safer asset classes, but would definitely include the EEM and VNQ asset classes.
+
+Even distribution portfolio (20% of the initial investment in each of the assets):
+```{r}
+library(foreach)
+library(mosaic)
+sim1 = foreach(i=1:5000, .combine='rbind') %do% {
+  n_days = 20
+	totalwealth = 100000
+	weights = c(0.2, 0.2, 0.2, 0.2, 0.2)
+	holdings = weights * totalwealth
+	wealthtracker = rep(0, n_days) 
+	for(today in 1:n_days) {
+		return.today = resample(returns, 1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		totalwealth = sum(holdings)
+		wealthtracker[today] = totalwealth
+	}
+	wealthtracker
+}
+
+head(sim1)
+hist(sim1[,n_days], 25)
+
+# Profit/loss
+hist(sim1[,n_days]- 100000)
+
+# Calculate 5% value at risk
+quantile(sim1[,n_days], 0.05) - 100000
+
+```
+This histogram shows us where each sample lands.  We can see that the majority of the time, an evenly spread portfolio will mostly return a positive amount.  We can also see that by choosing this portfolio, your 5% risk is about $3600.
+
+
+Safer distribution portfolio (60% in SPY, 35% in TLT, 5% in LQD):
+```{r}
+sim1 = foreach(i=1:5000, .combine='rbind') %do% {
+  n_days = 20
+	totalwealth = 100000
+	weights = c(0.6, 0.35, 0.05, 0 ,0)
+	holdings = weights * totalwealth
+	wealthtracker = rep(0, n_days) 
+	for(today in 1:n_days) {
+		return.today = resample(returns, 1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		totalwealth = sum(holdings)
+		wealthtracker[today] = totalwealth
+	}
+	wealthtracker
+}
+
+head(sim1)
+hist(sim1[,n_days], 25)
+
+# Profit/loss
+hist(sim1[,n_days]- 100000)
+
+# Calculate 5% value at risk
+quantile(sim1[,n_days], 0.05) - 100000
+
+#50% in SPY, 50% in TLT
+#5%: ~$2600
+
+```
+We can see that the majority of the time, an evenly spread portfolio will mostly return a positive amount.  We can also see that by choosing this portfolio, your 5% risk is about $2500.
+
+
+Riskier Distribution Portfolio(50/50 in EEM and VNQ):
+```{r}
+sim1 = foreach(i=1:5000, .combine='rbind') %do% {
+  n_days = 20
+	totalwealth = 100000
+	weights = c(0, 0, 0, 0.5, 0.5)
+	holdings = weights * totalwealth
+	wealthtracker = rep(0, n_days) 
+	for(today in 1:n_days) {
+		return.today = resample(returns, 1, orig.ids=FALSE)
+		holdings = holdings + holdings*return.today
+		totalwealth = sum(holdings)
+		wealthtracker[today] = totalwealth
+	}
+	wealthtracker
+}
+
+head(sim1)
+hist(sim1[,n_days], 25)
+
+# Profit/loss
+hist(sim1[,n_days]- 100000)
+
+# Calculate 5% value at risk
+quantile(sim1[,n_days], 0.05) - 100000
+
+#5% risk: ~$7600
+
+```
+We can see that the majority of the time, an evenly spread portfolio will return a positive amount as often as it will return a negative amount.  We can also see that by choosing this portfolio, your 5% risk is about $7600.
+
+Therefore if you would like a consistent return on your investment, choosing the safe portfolio is your best bet.  However, if you are willing to take about a $7600 bet, than your return could be much larger.
+
+
+##Problem 3
+###Is clustering or PCA better at interpreting the data on wines?
+
+Principal Component Analysis on the 11 chemical indicators of the wine:
+```{r}
+library(ggplot2)
+winedata = read.csv('../HW1/wine.csv', header = TRUE)
+attach(winedata)
+
+
+Z = winedata[,1:11]
+
+# PCA
+pc1 = prcomp(Z, scale=TRUE)
+loadings = pc1$rotation
+scores = pc1$x
+
+qplot(scores[,1], scores[,2], color=quality, shape = color, xlab='Component 1', ylab='Component 2')
+summary(pc1)
+plot(pc1)
+```
+With all 11 chemical indicators taken into account, the first principal component takes into account about 27% of the variance, as we can see from the summary of the principal component. I would ideally like to keep a plot that separates whites versus reds and that explains quality somewhat, but also has a higher proportion of variance for PC1. 
+
+
+By plotting each of the variables against one another using the pairs() function, I looked at the chemical variables where it looked they had a high association with either color or quality.  I reran PCA using only these variables.
+```{r}
+pairs(winedata)
+Z = winedata[,c(1,2,3,4,6,7,8,9,11)]
+
+# PCA
+pc1 = prcomp(Z, scale=TRUE)
+loadings = pc1$rotation
+scores = pc1$x
+
+qplot(scores[,1], scores[,2], color=quality, shape = color, xlab='Component 1', ylab='Component 2')
+summary(pc1)
+plot(pc1)
+```
+The summary shows that we succeeded in capturing more of the variance in PC1 than we had previously when we included all 11 chemical indicators.  The qplot also shows that high quality wines are closer together in the bottom left corner and that as the wines decrease in quality, it becomes more obvious through the other indicators whether the wine is a red or a white.
+
+
+Hierarchical clustering analysis:
+```{r}
+wineh <- read.csv('../HW1/wine.csv', header = TRUE)
+
+Y = wineh[,1:11]
+
+wine_scaled <- scale(Y, center=TRUE, scale=TRUE) 
+
+# Form a pairwise distance matrix using the dist function
+wine_distance_matrix = dist(wine_scaled, method='euclidean')
+
+# Now run hierarchical clustering
+hier_wine = hclust(wine_distance_matrix, method='average')
+
+
+# Plot the dendrogram
+plot(hier_wine, cex=0.8)
+
+# Cut the tree into 10 clusters
+cluster1 = cutree(hier_wine, k=10)
+summary(factor(cluster1))
+
+# Examine the cluster members
+which(cluster1 == 1)
+which(cluster1 == 2)
+which(cluster1 == 3)
+
+
+# Using single linkage instead
+hier_wine2 = hclust(wine_distance_matrix, method='single')
+
+# Plot the dendrogram
+plot(hier_wine2, cex=0.8)
+cluster2 = cutree(hier_wine2, k=10)
+summary(factor(cluster2))
+```
+Hierarchical clustering using both single and complete linkage returned trees that were unintelligible.  By looking at the summary of the clusters when cut into 10 clusters, we can see that the wines are not nearly evenly distributed. There are thousands of wines in the first cluster and only a few in the other 9 clusters. 
+
+Overall, using PCA with only certain variables seems like the best way to reduce the dimensionality of the wine data. It is capable of sorting the reds from the whites as well as giving an idea of the quality of the wine.
+
+##Problem 4
+By runnning K-means on this data set, I was able to discerne 5 distinct groups that are posting about the product.  These are an online gaming/ university group, a general chatter and picture posting group, a cooking group, a sports fandom group, and a health nutrition and fitness group. This makes sense, as the product is a sports/ hydration drink of some kind. 
+
+```{r}
+library(ggplot2)
+social = read.csv('../HW1/social_marketing.csv', header = TRUE)
+head(social)
+attach(social)
+#Normalize the subjects for each user
+Y = social[,2:37]
+Z = Y/rowSums(Y)
+head(Z)
+Z = scale(Z, center=TRUE, scale=TRUE)
+mu = attr(Z,"scaled:center") #mean
+sigma = attr(Z,"scaled:scale") #Standard deviation
+clust1 = kmeans(Z, 5, nstart=50)
+which(clust1$cluster == 1)
+clust1$center[1,]*sigma + mu #online gaming, college_uni
+clust1$center[2,]*sigma + mu #chatter, photo_sharing
+clust1$center[3,]*sigma + mu #cooking
+clust1$center[4,]*sigma + mu #sports fandom
+clust1$center[5,]*sigma + mu #health nutrition, personal fitness
+```
+
+```{r}
+qplot(college_uni, health_nutrition, data=social, color=factor(clust1$cluster))
+qplot(sports_playing, health_nutrition, data=social, color=factor(clust1$cluster))
+```
+For a sports drink, theoretically it seems like college students, athletes and sports fans would be drinking it and talking about it the most. We can see this in the two graphs above, and find that there are two main clusters that show up in the college uni vs. health nutrition graph and the sports playing vs. health nutrition graph. Cluster 1 has high beta values for online gaming and college uni and Cluster 4 has high beta values for sports fandom.  
+
