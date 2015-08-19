@@ -10,7 +10,7 @@ library(tm)
 library(e1071)
 #library(rpart)
 library(ggplot2)
-#library(caret)
+library(caret)
 author_dirs = Sys.glob('../data/ReutersC50/C50train/*')
 file_list = NULL
 training_labels = NULL
@@ -108,6 +108,7 @@ plot = ggplot(NBTable) + geom_bin2d(aes(x=testing_labels, y=NBPred, fill=Freq)) 
   scale_x_discrete(name="Actual Author") + 
   scale_y_discrete(name="Predicted Author") +
   theme(axis.text.x = element_text(angle = 90))
+plot
 
 ```
   
@@ -140,6 +141,7 @@ plot = ggplot(RFTable) + geom_bin2d(aes(x=testing_labels, y=RFPred, fill=Freq)) 
   scale_y_discrete(name="Predicted Author") +
   theme(axis.text.x = element_text(angle = 90))
 plot
+
 ```
   
 From this graph, we can see that the model preformed very well. The clearly delineated xy-line shows that the model predicted about 30-50 articles correct for every author.  This is much better than the Naive Bayes model.   
