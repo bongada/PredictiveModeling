@@ -1,0 +1,191 @@
+---
+title: "B.Daniel_Assignment2"
+output: pdf_document
+---
+**Problem 1**
+Which airliners get cancelled coming to or leaving from Austin the most? 
+```{r, echo = FALSE}
+library(plyr)
+library(ggplot2)
+library(reshape)
+library(lattice)
+flights = read.csv('../data/ABIA.csv')
+head(flights)
+subflights = flights[,c("UniqueCarrier","Origin", "Cancelled")]
+subflights2 = subflights[subflights[,"Cancelled"]==1,]
+countdf = count(subflights2,c("UniqueCarrier","Origin"))
+countdf
+countdf$ausOrNot <- countdf$Origin == 'AUS'
+countdf2 = count(countdf,c("UniqueCarrier","ausOrNot"))
+countdf2
+```
+
+```{r}
+colors = c('cadetblue2','darkgrey')
+barchart(freq ~ UniqueCarrier, data=countdf2, groups = ausOrNot, auto.key = list(space = "right", rows = 2, title = "Departing from Austin", cex.title =1), main = "The number of cancelled flights in 2008 at ABIA", xlab = "Unique Carrier ID", ylab = "Number of flights cancelled", par.settings=list(superpose.polygon=list(col=colors)))
+```
+For most airliners, it seems that flying out of Austin is more difficult than flying in. 
+
+
+**Problem 2: Author attribution**
+First, we start by reading in all of the files in the C50train set to a single corpus.
+```{r, echo=FALSE}
+library(tm)
+library(e1071)
+#library(rpart)
+library(ggplot2)
+#library(caret)
+author_dirs = Sys.glob('../data/ReutersC50/C50train/*')
+file_list = NULL
+training_labels = NULL
+for(author in author_dirs) {
+  author_name = substring(author, first=23)
+  files_to_add = Sys.glob(paste0(author, '/*.txt'))
+  file_list = append(file_list, files_to_add)
+  training_labels = append(training_labels, rep(author_name, length(files_to_add)))
+}
+```
+
+Then we get all of the names of the documents by using the readerPlain helper function.
+```{r, echo=FALSE}
+readerPlain = function(fname){
+				readPlain(elem=list(content=readLines(fname)), 
+							id=fname, language='en') }
+
+
+all_docs = lapply(file_list, readerPlain) 
+names(all_docs) = file_list
+names(all_docs) = sub('.txt', '', names(all_docs))
+
+training_corpus = Corpus(VectorSource(all_docs))
+names(training_corpus) = file_list
+```
+
+Next up, to make the bag of words more uniform (and therefore easier to process), we convert all of the words to lowercase, we remove numbers, punctuation, excess white space and the "SMART" words.
+```{r, echo = FALSE}
+training_corpus = tm_map(training_corpus, content_transformer(tolower)) 
+training_corpus = tm_map(training_corpus, content_transformer(removeNumbers)) 
+training_corpus = tm_map(training_corpus, content_transformer(removePunctuation)) 
+training_corpus = tm_map(training_corpus, content_transformer(stripWhitespace)) 
+training_corpus = tm_map(training_corpus, content_transformer(removeWords), stopwords("SMART"))
+```
+
+Some basic notes about the corpus:
+```{r}
+DTM_training = DocumentTermMatrix(training_corpus)
+DTM_training
+```
+
+99% sparsity is extreme, so to reduce this sparsity, we remove words from the corpus that do not show up often enough and convert the matrix to a more dense matrix type.
+```{r, echo = FALSE}
+DTM_training = removeSparseTerms(DTM_training, 0.975)
+DTM_training_df = as.data.frame(inspect(DTM_training))
+```
+
+Next we need to set up the test corpus as we did the training corpus.
+```{r, echo=FALSE}
+author_dirs = Sys.glob('../data/ReutersC50/C50test/*')
+file_list = NULL
+testing_labels = NULL
+for(author in author_dirs) {
+  author_name = substring(author, first=22)
+  files_to_add = Sys.glob(paste0(author, '/*.txt'))
+  file_list = append(file_list, files_to_add)
+  testing_labels = append(testing_labels, rep(author_name, length(files_to_add)))
+}
+all_docs = lapply(file_list, readerPlain) 
+names(all_docs) = file_list
+names(all_docs) = sub('.txt', '', names(all_docs))
+
+testing_corpus = Corpus(VectorSource(all_docs))
+names(testing_corpus) = file_list
+
+testing_corpus = tm_map(testing_corpus, content_transformer(tolower)) 
+testing_corpus = tm_map(testing_corpus, content_transformer(removeNumbers)) 
+testing_corpus = tm_map(testing_corpus, content_transformer(removePunctuation)) 
+testing_corpus = tm_map(testing_corpus, content_transformer(stripWhitespace)) 
+testing_corpus = tm_map(testing_corpus, content_transformer(removeWords), stopwords("SMART"))
+```
+
+Instead of making a Document Term Matrix from all of the words in the testing corpus, we only want to use the words that are in both the training and the testing corpus. Thus we create a dictionary for the training set that the testing DTM pulls from.
+```{r}
+training_dict = NULL
+training_dict = dimnames(DTM_training)[[2]]
+
+DTM_testing = DocumentTermMatrix(testing_corpus, list(dictionary=training_dict))
+DTM_testing = removeSparseTerms(DTM_testing, 0.975)
+DTM_testing_df = as.data.frame(inspect(DTM_testing))
+```
+
+*Naive Bayes*
+Next we run the naiveBayes() function from the package e1071. This creates the model based off of our training dataframe with a laplace smoothing factor of 0 (changing the smoothing factor did not seem to affect the results of our model). Then we run the predict function from this model against our testing dataframe. By converting this into a table we can see the predicted authors versus the actual authors, but this is a lot of information to weed through by hand. Therefore I created a heatmap-like graph that shows the number of articles atributed to the predicted author that were by the actual author. 
+```{r}
+NBModel = naiveBayes(x=DTM_training_df, y=as.factor(training_labels), laplace=0)
+
+NBPred = predict(NBModel, DTM_testing_df)
+
+
+NBTable = as.data.frame(table(NBPred,testing_labels))
+NBTable[1:10,]
+
+plot = ggplot(NBTable) + geom_bin2d(aes(x=testing_labels, y=NBPred, fill=Freq)) + 
+  scale_x_discrete(name="Actual Author") + 
+  scale_y_discrete(name="Predicted Author") +
+  theme(axis.text.x = element_text(angle = 90))
+plot
+
+
+```
+
+From this graph, we can see that the model attributes most of the articles to the same 3 - 6 authors, with Lydia Zajc receiving the majority of the credit from the model.  The correct assignments between predicted author and actual author lay along the xy-line, and the fact that this line is somewhat disctinct in the heatmap shows that the model did pretty well overall.
+
+*Random Forest*
+While Naive Bayes preformed pretty well, I thought to try Random Forest because of the large number of dimensions. In order to run Random Forest, we need to account for the missing terms that appear in the test corpus but not in the trainig corpus. A simple way to do this is to add in columns to the training matrix and fill the columns with zeros. 
+```{r,echo=FALSE}
+library(randomForest)
+library(plyr)
+DTM_testing = as.matrix(DTM_testing)
+DTM_training = as.matrix(DTM_training)
+
+intersectdf = data.frame(DTM_testing[,intersect(colnames(DTM_testing), colnames(DTM_training))])
+trainingcols = read.table(textConnection(""), col.names = colnames(DTM_training))
+
+DTM_new = rbind.fill(intersectdf,trainingcols)
+DTM_testing_df = as.data.frame(DTM_new)
+```
+
+Next we use this new dataframe to run the random forest model. I chose to run the model with 400 trees because I found that this was a nice balance between how long it took to run the model and how well the model preformed. I then used this model to predict which author wrote each paper and made a graph identical to the graph I made for the Naive Bayes model.
+```{r}
+RFModel = randomForest(x=DTM_training_df, y=as.factor(training_labels), ntree=400)
+RFPred = predict(RFModel, data=DTM_new)
+
+RFTable = as.data.frame(table(RFPred,testing_labels))
+
+plot = ggplot(RFTable) + geom_bin2d(aes(x=testing_labels, y=RFPred, fill=Freq)) + 
+  scale_x_discrete(name="Actual Author") + 
+  scale_y_discrete(name="Predicted Author") +
+  theme(axis.text.x = element_text(angle = 90))
+plot
+
+```
+
+From this graph, we can see that the model preformed very well. The clearly delineated xy-line shows that the model predicted about 30-50 articles correct for every author.  This is much better than the Naive Bayes model. 
+
+
+**Problem 3: Practice with association mining**
+We first read in the baskets, using the read.transactions() function, and then we cast the groceries as a special type, called "transactions".
+```{r, echo=FALSE}
+library(arules)
+groceries = read.transactions("../data/groceries.txt", format = 'basket', sep = ",")
+groceriestrans <- as(groceries, "transactions")
+```
+
+Next we run 'apriori' algorithm, where the support = 0.001, confidence = 0.5 and the maximum number of items in the predictive basket is 4. Here I set support to be very low because of the number of possible combinations of items means that finding multiple instances of the same combinations of items will be rare. On the other hand, I set confidence to be 50% because I am only interested in rules that I can believe in 50% of the time.
+```{r}
+basketrules <- apriori(groceriestrans, parameter=list(support=.001, confidence=.5, maxlen=4))
+inspect(basketrules)
+inspect(subset(basketrules, subset=lift > 15))
+```
+
+Using these numbers 4,683 rules were created. Just by looking at the subset where lift > 15, we can see that these rules make sense.  A person who has baking powder and flour in their basket would also be likely to pick up sugar because they are probably baking. Another obivous match is that someone buying ham and processed cheese is also likely to buy white bread. 
+

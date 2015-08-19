@@ -1,0 +1,26 @@
+---
+title: "B.Daniel_Assignment2_Problem1"
+output: html_document
+---
+
+#Problem 1  
+Which airliners get cancelled coming to or leaving from Austin the most?  
+```{r}
+library(plyr)
+library(ggplot2)
+library(reshape)
+library(lattice)
+flights = read.csv('../data/ABIA.csv')
+subflights = flights[,c("UniqueCarrier","Origin", "Cancelled")]
+subflights2 = subflights[subflights[,"Cancelled"]==1,]
+countdf = count(subflights2,c("UniqueCarrier","Origin"))
+countdf$ausOrNot <- countdf$Origin == 'AUS'
+countdf2 = count(countdf,c("UniqueCarrier","ausOrNot"))
+```
+
+```{r}
+colors = c('cadetblue2','darkgrey')
+barchart(freq ~ UniqueCarrier, data=countdf2, groups = ausOrNot, auto.key = list(space = "right", rows = 2, title = "Departing from Austin", cex.title =1), main = "The number of cancelled flights in 2008 at ABIA", xlab = "Unique Carrier ID", ylab = "Number of flights cancelled", par.settings=list(superpose.polygon=list(col=colors)))
+```
+
+For most airliners, it seems that flying out of Austin is more difficult than flying in.  

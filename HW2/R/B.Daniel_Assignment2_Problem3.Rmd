@@ -1,0 +1,20 @@
+---
+title: "B.Daniel_Assignment2_Problem3"
+output: html_document
+---
+#Problem 3: Practice with association mining  
+We first read in the baskets, using the read.transactions() function, and then we cast the groceries as a special type, called "transactions".  
+```{r}
+library(arules)
+groceries = read.transactions("../data/groceries.txt", format = 'basket', sep = ",")
+groceriestrans <- as(groceries, "transactions")
+```
+  
+Next we run 'apriori' algorithm, where the support = 0.001, confidence = 0.5 and the maximum number of items in the predictive basket is 4. Here I set support to be very low because of the number of possible combinations of items means that finding multiple instances of the same combinations of items will be rare. On the other hand, I set confidence to be 50% because I am only interested in rules that I can believe in 50% of the time.  
+```{r}
+basketrules <- apriori(groceriestrans, parameter=list(support=.001, confidence=.5, maxlen=4))
+inspect(basketrules)
+inspect(subset(basketrules, subset=lift > 15))
+```
+  
+Using these numbers 4,683 rules were created. Just by looking at the subset where lift > 15, we can see that these rules make sense.  A person who has baking powder and flour in their basket would also be likely to pick up sugar because they are probably baking. Another obivous match is that someone buying ham and processed cheese is also likely to buy white bread.   
